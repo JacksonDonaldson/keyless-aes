@@ -48,6 +48,7 @@ __global__ void get_keys(byte * keys, int start) {
     }
 }
 
+
 __global__ void check_plaintexts(byte * plaintexts, byte * correct_plaintext, byte * keys, byte * right_key){
     int idx = (blockIdx.x * blockDim.x + threadIdx.x) * AES_BLOCKSIZE;
     int match_count = 0;
@@ -87,30 +88,24 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
     int i = 0;
     int guesses_per_iteration = numBlocks * blockSize;
 
-    while(host_correct_key[0] == 0xff){
-        std::cout << i << std::endl;
+    //when we find a plaintext that matches the expected plaintext, check_plaintexts will write the right key to host_correct_key (and this'll stop)
+    while(host_correct_key[0] == 0xff && host_correct_key[1] == 0xff && host_correct_key[2] == 0xff && host_correct_key[3] == 0xff){
+
+        //generate the next batch of keys to test
         get_keys<<<numBlocks, blockSize>>>(keys, i * guesses_per_iteration);
 
-        // byte key[16] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
-        // cudaMemcpy(keys, key, AES_KEYSIZE, cudaMemcpyHostToDevice);
-        // gpuErrchk( cudaMemcpy(host_correct_key, plaintexts, AES_BLOCKSIZE, cudaMemcpyDeviceToHost) );
-
+        //run a decryption for each of those keys
         aes128_decrypt<<<numBlocks, blockSize, blockSize * AES_BLOCKSIZE + 256>>>(device_ciphertext, keys, plaintexts);
 
-        // gpuErrchk( cudaMemcpy(host_correct_key, plaintexts, AES_KEYSIZE, cudaMemcpyDeviceToHost) );
-        // break;
-
+        //check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
         check_plaintexts<<<numBlocks, blockSize>>>(plaintexts, device_correct_plaintext, keys, device_correct_key);
         gpuErrchk( cudaMemcpy(host_correct_key, device_correct_key, AES_KEYSIZE, cudaMemcpyDeviceToHost) );
         i++;
-        // if(i == 10){
-        //     break;
-        // }
     }
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
     double seconds = duration.count();
-    double keys_per_second = (i * guesses_per_iteration) / seconds;
+    double keys_per_second = (i * (long long int)guesses_per_iteration) / seconds;
     std::cout << "Decryption successful. The key is: " << bytes_to_hex(host_correct_key, 16) << std::endl;
     std::cout << "Tried " << i * guesses_per_iteration << " keys in " << seconds << " seconds (" << keys_per_second << " keys/second)" << std::endl;
 

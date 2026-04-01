@@ -1,4 +1,4 @@
-default: gpu_benchmark
+default: gpu_single_benchmark
 
 ifeq ($(OS),Windows_NT)
 

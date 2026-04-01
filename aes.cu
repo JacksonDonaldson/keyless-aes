@@ -63,6 +63,7 @@ __device__ __forceinline__ void aes_key_expansion(const uint * key, uint * expan
         rcon *= 2;
         //each thread should hit this if statements at the same time (doesn't depend on data)
         //so it shouldn't be a performance hit
+        //(profiler agrees w/ me)
         if(rcon == 0x100){
             rcon = 0x1b;
         }
@@ -81,14 +82,28 @@ __device__ __forceinline__ void aes_key_expansion(const uint * key, uint * expan
 
 __device__ __forceinline__ void add_round_key(byte * state, const byte * key){
     for(int i = 0; i < 4; i++){
-        ((uint*)state)[i] ^= ((uint*)key)[i]; //lots of stalls here
+        ((uint*)state)[i] ^= ((uint*)key)[i]; //lots of stalls here according to profiler - speedup maybe?
     }
 }
 
 
 __device__ __forceinline__ void inv_shift_rows(byte * state){
+    uchar4 c0 = *((uchar4*)(state + 0));
+    uchar4 c1 = *((uchar4*)(state + 4));
+    uchar4 c2 = *((uchar4*)(state + 8));
+    uchar4 c3 = *((uchar4*)(state + 12));
 
-    //"global accesses"
+    uchar4 r0 = make_uchar4(c0.x, c3.y, c2.z, c1.w);
+    uchar4 r1 = make_uchar4(c1.x, c0.y, c3.z, c2.w);
+    uchar4 r2 = make_uchar4(c2.x, c1.y, c0.z, c3.w);
+    uchar4 r3 = make_uchar4(c3.x, c2.y, c1.z, c0.w);
+
+    *((uchar4*)(state + 0))  = r0;
+    *((uchar4*)(state + 4))  = r1;
+    *((uchar4*)(state + 8))  = r2;
+    *((uchar4*)(state + 12)) = r3;
+
+    //the above is just this; unclear if it really made a difference in runtime...
     // byte temp = state[13];
     // state[13] = state[9];
     // state[9] = state[5];
@@ -107,21 +122,6 @@ __device__ __forceinline__ void inv_shift_rows(byte * state){
     // state[3] = state[7];
     // state[7] = state[11];
     // state[11] = temp;
-
-    uchar4 c0 = *((uchar4*)(state + 0));
-    uchar4 c1 = *((uchar4*)(state + 4));
-    uchar4 c2 = *((uchar4*)(state + 8));
-    uchar4 c3 = *((uchar4*)(state + 12));
-
-    uchar4 r0 = make_uchar4(c0.x, c3.y, c2.z, c1.w);
-    uchar4 r1 = make_uchar4(c1.x, c0.y, c3.z, c2.w);
-    uchar4 r2 = make_uchar4(c2.x, c1.y, c0.z, c3.w);
-    uchar4 r3 = make_uchar4(c3.x, c2.y, c1.z, c0.w);
-
-    *((uchar4*)(state + 0))  = r0;
-    *((uchar4*)(state + 4))  = r1;
-    *((uchar4*)(state + 8))  = r2;
-    *((uchar4*)(state + 12)) = r3;
 }
 
 
@@ -165,11 +165,9 @@ __device__ __forceinline__ void inv_mix_columns(byte * state){
         byte s_2 = state[i * 4 + 2];
         byte s_3 = state[i * 4 + 3];
 
-        // state[i * 4 + 0] = galois_mult(s_0, a_0) ^ galois_mult(s_1, a_3) ^ galois_mult(s_2, a_2) ^ galois_mult(s_3, a_1);
-        // state[i * 4 + 1] = galois_mult(s_0, a_1) ^ galois_mult(s_1, a_0) ^ galois_mult(s_2, a_3) ^ galois_mult(s_3, a_2);
-        // state[i * 4 + 2] = galois_mult(s_0, a_2) ^ galois_mult(s_1, a_1) ^ galois_mult(s_2, a_0) ^ galois_mult(s_3, a_3);
-        // state[i * 4 + 3] = galois_mult(s_0, a_3) ^ galois_mult(s_1, a_2) ^ galois_mult(s_2, a_1) ^ galois_mult(s_3, a_0);
 
+        //for speed, define a separate function for galois multiplication by each possible number
+        //rather than just 1 general one
         state[i * 4 + 0] = galois_mult_e(s_0) ^ galois_mult_b(s_1) ^ galois_mult_d(s_2) ^ galois_mult_9(s_3);
         state[i * 4 + 1] = galois_mult_9(s_0) ^ galois_mult_e(s_1) ^ galois_mult_b(s_2) ^ galois_mult_d(s_3);
         state[i * 4 + 2] = galois_mult_d(s_0) ^ galois_mult_9(s_1) ^ galois_mult_e(s_2) ^ galois_mult_b(s_3);
@@ -179,20 +177,24 @@ __device__ __forceinline__ void inv_mix_columns(byte * state){
 
 __global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, byte * plaintexts){
     int idx = (blockIdx.x * blockDim.x + threadIdx.x) * AES_BLOCKSIZE;
-    // if(idx != 0){
-    //     return;
-    // }
+
     const byte * key = keys + idx;
     byte * plaintext = plaintexts + idx;
     
+    //first expand the key; each round of AES uses a different round key derived from the original.
+    //To speed this up, I've tried:
+    // storing this in shmem (requires too much memory, seems to slow down)
+
+    // doing the key expansion dynamically 
+    //     this doesn't work for decryption; we need the last round key first, but to get that we need to do the whole key expansion
+    //     and we may as well just store the expanded key since we'll need the whole thing
     byte expanded_key[AES_KEYSIZE * AES_ROUNDS];
     aes_key_expansion((uint*)key, (uint*)expanded_key);
-    // memcpy(plaintext, expanded_key, 16);
 
-    // return;
 
     extern __shared__ byte states[];
 
+    //copy the reverse sbox to shared memory; this is a massive speedup, since we're doing a bunch of random accesses to it.
     byte * sharedrsbox = states;
     for(int i = threadIdx.x; i < 256; i += blockDim.x){
         if(i < 256){
@@ -200,19 +202,18 @@ __global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, byte 
         }
     }
     __syncthreads();
-    // memcpy(plaintexts, sharedrsbox, 16);
-    // return;
-    // memcpy(sharedrsbox, rsbox, 256);
 
+    //also store the internal AES state in shmem
     byte * state = states + threadIdx.x * AES_BLOCKSIZE + 256;
 
-    // memcpy(state, ciphertext, AES_BLOCKSIZE);
     *(uint4*) state = *(uint4*) ciphertext;
     
+    //this is just the definition of AES decryption;
+    //see https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.197.pdf
     add_round_key(state, expanded_key + (AES_ROUNDS-1) * AES_KEYSIZE);
-
     inv_sub_bytes(state, sharedrsbox);
     inv_shift_rows(state);
+
     //from AES_ROUNDS down, since we're decrypting
     for(int i = (AES_ROUNDS - 1); i >= 1; i--){
         add_round_key(state, expanded_key + AES_KEYSIZE * (i-1));
@@ -224,7 +225,6 @@ __global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, byte 
     }
 
     add_round_key(state, key);
-    // memcpy(plaintext, state, 16);
     *(uint4*) plaintext = *(uint4*) state;
 
 }

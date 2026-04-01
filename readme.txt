@@ -87,4 +87,8 @@ Notes:
 Currently keys just count up. I intend to implement a more interesting search mechanism - perhaps a word list?
 
 https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_Core128.pdf
-is an incredibly helpful resource for implementing AES, as it goes step-by-step
+is an incredibly helpful resource for implementing AES, as it goes step-by-step through the decryption & encryption process
+
+I used NSignt Compute to profile my code & get an idea of where I could find the most time - it's really quite good.
+
+My 3060 makes a fun little whistling noise while running the benchmark. It's somewhat concerning, actually...

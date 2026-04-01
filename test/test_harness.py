@@ -30,7 +30,7 @@ def run_test(ciphertext, plaintext, thread_count, block_size, true_key):
     return throughput
 
 def main():
-    key_int = random.randint(0, 2**26)
+    key_int = random.randint(0, 2**27)
     key = key_int.to_bytes(16, byteorder="little")
     cipher = AES.new(key, AES.MODE_ECB)
     plaintext = b'Test plaintext.\x00'
@@ -38,8 +38,8 @@ def main():
 
 
     # Test different thread counts and block sizes
-    thread_counts = [2 ** i for i in range(14, 28, 2)]
-    block_sizes = [16, 32, 64, 128, 240, 256, 512]
+    thread_counts = [2 ** i for i in range(16, 28, 2)]
+    block_sizes = [32, 64, 128, 240, 256, 512]
     results = []
 
     for threads in thread_counts:

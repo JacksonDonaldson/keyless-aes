@@ -203,8 +203,15 @@ __device__ __forceinline__ void get_key(byte * key, int start) {
     }
 }
 
+
 __global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, const byte * correct_plaintext, byte * correct_key){
 
+
+
+    extern __shared__ byte states[];
+    //store the internal AES state in shmem
+    byte * state = states + threadIdx.x * SHMEM_PER_THREAD + SHMEM_OFFSET;
+    
     //first expand the key; each round of AES uses a different round key derived from the original.
     //To speed this up, I've tried:
     // storing this in shmem (requires too much memory, seems to slow down)
@@ -212,17 +219,11 @@ __global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, co
     // doing the key expansion dynamically 
     //     this doesn't work for decryption; we need the last round key first, but to get that we need to do the whole key expansion
     //     and we may as well just store the expanded key since we'll need the whole thing
-
-    int idx = (blockIdx.x * blockDim.x + threadIdx.x);
-
-    
     byte key[AES_KEYSIZE];
     byte expanded_key[AES_KEYSIZE * (AES_ROUNDS)];
     get_key(key, key_start);
 
     aes_key_expansion((uint*)key, (uint*)expanded_key);
-
-    extern __shared__ byte states[];
 
     //copy the reverse sbox to shared memory; this is a massive speedup, since we're doing a bunch of random accesses to it.
     byte * sharedrsbox = states;
@@ -233,8 +234,6 @@ __global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, co
     }
     __syncthreads();
 
-    //also store the internal AES state in shmem
-    byte * state = states + threadIdx.x * AES_BLOCKSIZE + 256;
 
     *(uint4*) state = *(uint4*) ciphertext;
     

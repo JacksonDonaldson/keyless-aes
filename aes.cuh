@@ -7,4 +7,7 @@
 typedef unsigned char byte;
 typedef unsigned int uint;
 
+#define SHMEM_PER_THREAD (AES_BLOCKSIZE)
+#define SHMEM_OFFSET 256
+
 __global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, const byte * correct_plaintext, byte * correct_key);

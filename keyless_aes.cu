@@ -78,7 +78,7 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
         // get_keys<<<numBlocks, blockSize>>>(keys, i * guesses_per_iteration);
 
         //run a decryption for each of those keys
-        aes128_decrypt<<<numBlocks, blockSize, blockSize * AES_BLOCKSIZE + 256>>>(device_ciphertext, i * guesses_per_iteration, device_correct_plaintext, device_correct_key);
+        aes128_decrypt<<<numBlocks, blockSize, blockSize * SHMEM_PER_THREAD + SHMEM_OFFSET>>>(device_ciphertext, i * guesses_per_iteration, device_correct_plaintext, device_correct_key);
 
         // //check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
         // check_plaintexts<<<numBlocks, blockSize>>>(plaintexts, device_correct_plaintext, keys, device_correct_key);

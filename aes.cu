@@ -176,17 +176,20 @@ __device__ __forceinline__ void inv_mix_columns(byte * state){
 }
 
 
-__device__ __forceinline__  void check_plaintext(const byte * plaintext, const byte * correct_plaintext, const byte * key, byte * right_key){
-    int match_count = 0;
-    for(unsigned int i = 0; i < AES_BLOCKSIZE; i++){
-        match_count +=  (plaintext[i] == correct_plaintext[i]) ? 1 : 0;
-    }
-    if(match_count == AES_BLOCKSIZE){ // this is very rare (once per run...), so an if statement is fine
-        for(unsigned int i = 0; i < AES_KEYSIZE; i++){
-            right_key[i] = key[i];
+__device__ __forceinline__  void check_plaintext(const uint * plaintext, const uint * correct_plaintext, const byte * key, byte * right_key){
+    for(unsigned int i = 0; i < AES_BLOCKSIZE / 4; i++){
+        if(plaintext[i] != correct_plaintext[i]){
+            return; //this isn't the right key
+            //the speed improvement from an early return more than makes up for thread divergence here;
+            //this'll almost always return after the first check (1 in 4 billion it doesn't)
         }
-        right_key[AES_KEYSIZE] = 1; //flag that we've found the key
     }
+
+    for(unsigned int i = 0; i < AES_KEYSIZE; i++){
+        right_key[i] = key[i];
+    }
+    right_key[AES_KEYSIZE] = 1; //flag that we've found the key
+
 }
 
 
@@ -239,6 +242,6 @@ __global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, const
 
     add_round_key(state, key);
     
-    check_plaintext(state, correct_plaintext, key, correct_key);
+    check_plaintext((uint *)state, (const uint *)correct_plaintext, key, correct_key);
 
 }

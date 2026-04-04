@@ -175,12 +175,25 @@ __device__ __forceinline__ void inv_mix_columns(byte * state){
     }
 }
 
-__global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, byte * plaintexts){
+
+__device__ __forceinline__  void check_plaintext(const byte * plaintext, const byte * correct_plaintext, const byte * key, byte * right_key){
+    int match_count = 0;
+    for(unsigned int i = 0; i < AES_BLOCKSIZE; i++){
+        match_count +=  (plaintext[i] == correct_plaintext[i]) ? 1 : 0;
+    }
+    if(match_count == AES_BLOCKSIZE){ // this is very rare (once per run...), so an if statement is fine
+        for(unsigned int i = 0; i < AES_KEYSIZE; i++){
+            right_key[i] = key[i];
+        }
+        right_key[AES_KEYSIZE] = 1; //flag that we've found the key
+    }
+}
+
+
+__global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, const byte * correct_plaintext, byte * correct_key){
     int idx = (blockIdx.x * blockDim.x + threadIdx.x) * AES_BLOCKSIZE;
 
-    const byte * key = keys + idx;
-    byte * plaintext = plaintexts + idx;
-    
+    const byte * key = keys + idx;    
     //first expand the key; each round of AES uses a different round key derived from the original.
     //To speed this up, I've tried:
     // storing this in shmem (requires too much memory, seems to slow down)
@@ -225,6 +238,7 @@ __global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, byte 
     }
 
     add_round_key(state, key);
-    *(uint4*) plaintext = *(uint4*) state;
+    
+    check_plaintext(state, correct_plaintext, key, correct_key);
 
 }

@@ -49,19 +49,6 @@ __global__ void get_keys(byte * keys, int start) {
 }
 
 
-__global__ void check_plaintexts(byte * plaintexts, byte * correct_plaintext, byte * keys, byte * right_key){
-    int idx = (blockIdx.x * blockDim.x + threadIdx.x) * AES_BLOCKSIZE;
-    int match_count = 0;
-    for(unsigned int i = 0; i < AES_BLOCKSIZE; i++){
-        match_count +=  (plaintexts[idx + i] == correct_plaintext[i]) ? 1 : 0;
-    }
-    if(match_count == AES_BLOCKSIZE){ // this is very rare (once per run...), so an if statement is fine
-        for(unsigned int i = 0; i < AES_KEYSIZE; i++){
-            right_key[i] = keys[idx + i];
-        }
-    }
-}
-
 void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected_plaintext){
     unsigned long long count = numBlocks * blockSize;
 
@@ -73,14 +60,16 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
 
     cudaMalloc(&device_ciphertext, AES_BLOCKSIZE);
     cudaMalloc(&device_correct_plaintext, AES_BLOCKSIZE);
-    cudaMalloc(&device_correct_key, AES_KEYSIZE * 0xff);
-    cudaMemset(device_correct_key, 0xff, AES_KEYSIZE);
+    cudaMalloc(&device_correct_key, AES_KEYSIZE + 1);
+    cudaMemset(device_correct_key, 0xff, AES_KEYSIZE + 1);
 
+    
     cudaMemcpy(device_correct_plaintext, expected_plaintext, AES_BLOCKSIZE, cudaMemcpyHostToDevice);
     cudaMemcpy(device_ciphertext, ciphertext, AES_BLOCKSIZE, cudaMemcpyHostToDevice);
     
-    host_correct_key = (byte*) malloc(AES_KEYSIZE * 0xff);
-    memset(host_correct_key, 0xff, AES_KEYSIZE);
+    host_correct_key = (byte*) malloc(AES_KEYSIZE + 1);
+    memset(host_correct_key, 0xff, AES_KEYSIZE + 1);
+    
 
 
     std::cout << "running..." << std::endl;
@@ -89,17 +78,17 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
     int guesses_per_iteration = numBlocks * blockSize;
 
     //when we find a plaintext that matches the expected plaintext, check_plaintexts will write the right key to host_correct_key (and this'll stop)
-    while(host_correct_key[0] == 0xff && host_correct_key[1] == 0xff && host_correct_key[2] == 0xff && host_correct_key[3] == 0xff){
+    while(host_correct_key[AES_KEYSIZE] != 1){
 
         //generate the next batch of keys to test
         get_keys<<<numBlocks, blockSize>>>(keys, i * guesses_per_iteration);
 
         //run a decryption for each of those keys
-        aes128_decrypt<<<numBlocks, blockSize, blockSize * AES_BLOCKSIZE + 256>>>(device_ciphertext, keys, plaintexts);
+        aes128_decrypt<<<numBlocks, blockSize, blockSize * AES_BLOCKSIZE + 256>>>(device_ciphertext, keys, device_correct_plaintext, device_correct_key);
 
-        //check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
-        check_plaintexts<<<numBlocks, blockSize>>>(plaintexts, device_correct_plaintext, keys, device_correct_key);
-        gpuErrchk( cudaMemcpy(host_correct_key, device_correct_key, AES_KEYSIZE, cudaMemcpyDeviceToHost) );
+        // //check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
+        // check_plaintexts<<<numBlocks, blockSize>>>(plaintexts, device_correct_plaintext, keys, device_correct_key);
+        gpuErrchk( cudaMemcpy(host_correct_key, device_correct_key, AES_KEYSIZE+1, cudaMemcpyDeviceToHost) );
         i++;
     }
     auto end = std::chrono::high_resolution_clock::now();

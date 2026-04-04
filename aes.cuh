@@ -7,4 +7,4 @@
 typedef unsigned char byte;
 typedef unsigned int uint;
 
-__global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, const byte * correct_plaintext, byte * correct_key);
+__global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, const byte * correct_plaintext, byte * correct_key);

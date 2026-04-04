@@ -192,11 +192,19 @@ __device__ __forceinline__  void check_plaintext(const uint * plaintext, const u
 
 }
 
+__device__ __forceinline__ void get_key(byte * key, int start) {
+    int idx = (blockIdx.x * blockDim.x + threadIdx.x);
+    int value = idx + start;
+    for(int i = 0; i < 4; i++){
+        key[i] = 0xff & (value >> (i * 8));
+    }
+    for(int i = 4; i < AES_KEYSIZE; i++){
+        key[i] = 0;
+    }
+}
 
-__global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, const byte * correct_plaintext, byte * correct_key){
-    int idx = (blockIdx.x * blockDim.x + threadIdx.x) * AES_BLOCKSIZE;
+__global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, const byte * correct_plaintext, byte * correct_key){
 
-    const byte * key = keys + idx;    
     //first expand the key; each round of AES uses a different round key derived from the original.
     //To speed this up, I've tried:
     // storing this in shmem (requires too much memory, seems to slow down)
@@ -204,9 +212,15 @@ __global__ void aes128_decrypt(const byte * ciphertext, const byte * keys, const
     // doing the key expansion dynamically 
     //     this doesn't work for decryption; we need the last round key first, but to get that we need to do the whole key expansion
     //     and we may as well just store the expanded key since we'll need the whole thing
-    byte expanded_key[AES_KEYSIZE * AES_ROUNDS];
-    aes_key_expansion((uint*)key, (uint*)expanded_key);
 
+    int idx = (blockIdx.x * blockDim.x + threadIdx.x);
+
+    
+    byte key[AES_KEYSIZE];
+    byte expanded_key[AES_KEYSIZE * (AES_ROUNDS)];
+    get_key(key, key_start);
+
+    aes_key_expansion((uint*)key, (uint*)expanded_key);
 
     extern __shared__ byte states[];
 

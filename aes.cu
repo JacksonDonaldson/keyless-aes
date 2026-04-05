@@ -192,6 +192,7 @@ __device__ __forceinline__  void check_plaintext(const uint * plaintext, const u
 
 }
 
+#if defined(SIMPLE_KEY)
 __device__ __forceinline__ void get_key(byte * key, int start) {
     int idx = (blockIdx.x * blockDim.x + threadIdx.x);
     int value = idx + start;
@@ -202,7 +203,28 @@ __device__ __forceinline__ void get_key(byte * key, int start) {
         key[i] = 0;
     }
 }
+#else
+#include "wordlist.cuh"
+__device__ __forceinline__ void get_key(byte * key, int start) {
+    int idx = (blockIdx.x * blockDim.x + threadIdx.x);
+    int value = idx + start;
+    const char* word1 = wordlist + (value / (WORDLIST_SIZE * WORDLIST_SIZE)) * WORD_SIZE;
+    const char* word2 = wordlist + ((value / WORDLIST_SIZE) % WORDLIST_SIZE) * WORD_SIZE;
+    const char* word3 = wordlist + (value % WORDLIST_SIZE) * WORD_SIZE;
 
+    uint key_idx = 0;
+    memcpy(key, word3 + 1, AES_KEYSIZE);
+    key[15] = 0;
+    // key_idx += *word1;
+    // memcpy(key + key_idx, word2 + 1, min(AES_KEYSIZE - key_idx, *word2));
+    // key_idx += *word2;
+    // memcpy(key + key_idx, word3 + 1, min(AES_KEYSIZE - key_idx, *word3));
+    // key_idx += *word3;
+
+    // memset(key + key_idx, 0, AES_KEYSIZE - key_idx);
+
+}
+#endif
 
 __global__ void aes128_decrypt(const byte * ciphertext, const uint key_start, const byte * correct_plaintext, byte * correct_key){
 

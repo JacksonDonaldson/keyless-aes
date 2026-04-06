@@ -42,10 +42,9 @@ wordlist.cuh:
 	py generate_wordlist.py
 	
 gpu_wordlist_benchmark: keyless_aes_wordlist.exe wordlist.cuh
-	
-	./keyless_aes_wordlist.exe 4759b84a19961ea8f00d3c5b0b60ecfd 5465737420706c61696e746578742e00 67108864 128
+	./keyless_aes_wordlist.exe fdade589e73db3addf33a811edf80d8f 5465737420706c61696e746578742e00 67108864 128
 
 clean:
-	rm -rf keyless_aes_cpu_benchmark keyless_aes.exe
+	rm -rf keyless_aes_cpu_benchmark keyless_aes.exe keyless_aes_wordlist.exe wordlist.cuh
 
 .FORCE:

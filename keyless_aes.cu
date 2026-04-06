@@ -68,8 +68,8 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
 
     std::cout << "running..." << std::endl;
     auto start = std::chrono::high_resolution_clock::now();
-    int i = 0;
-    int guesses_per_iteration = numBlocks * blockSize;
+    uint64_t i = 0;
+    uint64_t guesses_per_iteration = numBlocks * blockSize;
 
     //when we find a plaintext that matches the expected plaintext, check_plaintexts will write the right key to host_correct_key (and this'll stop)
     while(host_correct_key[AES_KEYSIZE] != 1){
@@ -83,6 +83,8 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
         // //check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
         // check_plaintexts<<<numBlocks, blockSize>>>(plaintexts, device_correct_plaintext, keys, device_correct_key);
         gpuErrchk( cudaMemcpy(host_correct_key, device_correct_key, AES_KEYSIZE+1, cudaMemcpyDeviceToHost) );
+
+        std::cout << "\rTried " << (i+1) * guesses_per_iteration << " keys..." << std::flush;
         i++;
     }
     auto end = std::chrono::high_resolution_clock::now();

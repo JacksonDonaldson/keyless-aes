@@ -29,7 +29,7 @@ endif
 keyless_aes.exe: aes.cu keyless_aes.cu .FORCE
 	nvcc aes.cu keyless_aes.cu -o $@ -ccbin $(CXX) -Xptxas=-v -DSIMPLE_KEY
 
-keyless_aes_wordlist.exe: aes.cu keyless_aes.cu .FORCE
+keyless_aes_wordlist.exe: wordlist.cuh aes.cu keyless_aes.cu .FORCE
 	nvcc aes.cu keyless_aes.cu -o $@ -ccbin $(CXX) -Xptxas=-v -DWORDLIST_KEY
 
 gpu_single_benchmark: keyless_aes.exe
@@ -38,10 +38,10 @@ gpu_single_benchmark: keyless_aes.exe
 gpu_full_benchmark: keyless_aes.exe
 	py test/test_harness.py
 
-wordlist.cuh:
+wordlist.cuh: wordlist.txt
 	py generate_wordlist.py
 	
-gpu_wordlist_benchmark: keyless_aes_wordlist.exe wordlist.cuh
+gpu_wordlist_benchmark: keyless_aes_wordlist.exe
 	./keyless_aes_wordlist.exe fdade589e73db3addf33a811edf80d8f 5465737420706c61696e746578742e00 67108864 128
 
 clean:

@@ -14,28 +14,30 @@ How to run:
 Requires nvcc - and has no other dependencies. I've tried to get the makerules to work on both linux + windows,
 but if it doesn't work out of the box you might need to define CXX for your platform.
 
-run 'make'. This will build the gpu-accelerated aes decryptor 'keyless_aes.exe' and run a simple test using the example ciphertext and plaintext.
+run `make`. This will build the gpu-accelerated aes decryptor 'keyless_aes.exe' and run a simple test using the example ciphertext and plaintext.
 You can verify that the produced key matches the real one. This should look something like:
 
 ![output from running 'make'](photos/make.png)
 
 For a more complete test that runs across a number of thread counts and block sizes, run 
-'make gpu_full_benchmark' 
+`make gpu_full_benchmark` 
 
 This will produce a list of thread count and block size combinations sorted by throughput. An example from running on an RTX 3060 is below.
 
 ![output from running 'make gpu_full_benchmark'](photos/gpu_full_benchmark.png)
+
 ...
+
 ![continued output from running 'make gpu_full_benchmark'](photos/gpu_full_benchmark_end.png)
 
 For comparison, the repository also contains an openssl-based CPU implementation that can be built and ran on linux only with
-'make cpu_benchmark' - this, of course, will require openssl devel headers to be installed on your system.
+`make cpu_benchmark` - this, of course, will require openssl devel headers to be installed on your system.
 On a Ryzen 7 5800X, this benchmark outputs:
 
 ![output from running 'make cpu_benchmark'](photos/cpu_benchmark.png)
 
 Finally, I also implemented a more interesting key guessing scheme - the previous ones all just count up from 0.
-You can test that by running `make gpu_wordlist_benchmark`, which compile the same aes decryption source code but with key generation defined 
+You can test that by running `make gpu_wordlist_benchmark`, which compiles the same aes decryption source code but with key generation defined 
 to be the concatenation of three of the most common english words. Then, it'll run that keyguesser with a hard-coded ciphertext / plaintext pair
 that was generated with the key 'correcthorsebatt' - output should look like the below:
 

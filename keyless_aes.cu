@@ -74,14 +74,18 @@ void guess_keys(int numBlocks, int blockSize, byte * ciphertext, byte * expected
     //when we find a plaintext that matches the expected plaintext, check_plaintexts will write the right key to host_correct_key (and this'll stop)
     while(host_correct_key[AES_KEYSIZE] != 1){
 
-        //generate the next batch of keys to test
+        //generate the next batch of keys to test (this is incorporated into aes128_decrypt for speed)
         // get_keys<<<numBlocks, blockSize>>>(keys, i * guesses_per_iteration);
 
         //run a decryption for each of those keys
         aes128_decrypt<<<numBlocks, blockSize, blockSize * SHMEM_PER_THREAD + SHMEM_OFFSET>>>(device_ciphertext, i * guesses_per_iteration, device_correct_plaintext, device_correct_key);
 
-        // //check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
+        // check if the decrypted plaintexts match the expected plaintext, and if so write the correct key to host_correct_key
+        // also now in aes128_decrypt
         // check_plaintexts<<<numBlocks, blockSize>>>(plaintexts, device_correct_plaintext, keys, device_correct_key);
+
+        // this forces synchronization, but shouldn't really be much of a slowdown - we're only pulling 17 bytes, and with the thread counts we're working at
+        // this should be pretty uncommon in the grand scheme of things. And you're gonna have to check if you got a result at some point...
         gpuErrchk( cudaMemcpy(host_correct_key, device_correct_key, AES_KEYSIZE+1, cudaMemcpyDeviceToHost) );
 
         std::cout << "\rTried " << (i+1) * guesses_per_iteration << " keys..." << std::flush;

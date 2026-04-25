@@ -82,7 +82,7 @@ __device__ __forceinline__ void aes_key_expansion(const uint * key, uint * expan
 
 __device__ __forceinline__ void add_round_key(byte * state, const byte * key){
     for(int i = 0; i < 4; i++){
-        ((uint*)state)[i] ^= ((uint*)key)[i]; //lots of stalls here according to profiler - speedup maybe?
+        ((uint*)state)[i] ^= ((uint*)key)[i]; //lots of stalls here according to profiler - speedup maybe? (making this an int at a time helped a bit)
     }
 }
 
@@ -258,8 +258,9 @@ __global__ void aes128_decrypt(const byte * ciphertext, uint64_t key_start, cons
 
     *(uint4*) state = *(uint4*) ciphertext;
     
-    //this is just the definition of AES decryption;
+    //this an optimized version of AES decryption;
     //see https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.197.pdf
+
     add_round_key(state, expanded_key + (AES_ROUNDS-1) * AES_KEYSIZE);
     inv_sub_bytes(state, sharedrsbox);
     inv_shift_rows(state);
@@ -274,6 +275,10 @@ __global__ void aes128_decrypt(const byte * ciphertext, uint64_t key_start, cons
         inv_shift_rows(state);
     }
 
+    // I had a bunch of code here that special-cased the last ~round and a half of decryption
+    // to minimize the computation - since at that point you can get away with just decrypting ~4 bytes
+    // (if you try to do that earlier you run into mix_columns throwing all the data together, dang encryption algorithms not being linear)
+    // but it turns out that's just slower - keeping the code simple is good
     add_round_key(state, key);
     
     check_plaintext((uint *)state, (const uint *)correct_plaintext, key, correct_key);
